@@ -1,18 +1,16 @@
 /*
-*  www.openedcaptions.com routes captions from C-Span 1 channel to a socket end point. 
-* This script serves as an itnermediate server to buffer text from socket and expose it as REST API end point. 
+*  www.openedcaptions.com routes captions from C-Span 1 channel to a socket end point.
+* This script serves as an itnermediate server to buffer text from socket and expose it as REST API end point.
 * * that also support char offset. see README for more info.
 *  author: Dan Z @impronunciable
 */
+const bertha = require('bertha-client');
 const io = require('socket.io-client')
 const fs = require('fs')
 const http = require('http')
 const URL = require('url')
 const s = require('underscore.string')
 const parseCsv = require('csv-parse/lib/sync')
-
-// Load proper noun dictionary
-const words = parseCsv(fs.readFileSync('words.csv'))
 
 // Where we stash our stuff
 var cache = []
@@ -42,7 +40,7 @@ socket.on('content', data => {
   cache.push(dat)
 })
 
-http.createServer((req, res) => {
+http.createServer(async (req, res) => {
   const url = URL.parse(req.url, true)
   if ( url.pathname != '/' ) {
     res.writeHead(404, { 'Content-Type': 'text/plain' })
@@ -53,14 +51,19 @@ http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({
       now: now,
-      captions: formatText(getWordsSince(timestamp))
+      captions: await formatText(getWordsSince(timestamp))
     }))
   }
 }).listen(process.env.PORT || 5000)
 
-function formatText(str) {
+async function formatText(str) {
   var ret = str.toLowerCase().replace("\r\n", ' ') // remove random line breaks
   ret = s.clean(ret) // remove redundant spaces
+
+  // Load proper noun dictionary
+  const words = await bertha.get('1o3kjPOvWCpyHWtBhCd9hTt9KMqus-85CXOHOdO0o1UA', ['words'], { republish: true }).then((data) => {
+    return data.words.map(d => [d.matchword, d.ftstyle]);
+  });
 
   // now use our words file to do a bunch of stuff
   words.forEach((pair) => {
