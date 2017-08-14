@@ -43,8 +43,15 @@ socket.on('content', data => {
 http.createServer(async (req, res) => {
   const url = URL.parse(req.url, true)
   if ( url.pathname != '/' ) {
-    res.writeHead(404, { 'Content-Type': 'text/plain' })
-    res.end('404 not found')
+    if (url.pathname === '/visual') {
+      const now = Date.now()
+      const timestamp = parseInt(url.query.since || 0)
+      res.setHeader('Content-Type', 'text/html')
+      res.end(`<html><head></head><body>${await formatText(getWordsSince(timestamp))}</body></html>`);
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' })
+      res.end('404 not found')
+    }
   } else {
     const now = Date.now()
     const timestamp = parseInt(url.query.since || 0)
