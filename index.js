@@ -42,23 +42,30 @@ socket.on('content', data => {
 
 http.createServer(async (req, res) => {
   const url = URL.parse(req.url, true)
+
+  const now = Date.now()
+  const timestamp = parseInt(url.query.since || 0)
+  let formattedText = '';
+  try {
+    formattedText = await formatText(getWordsSince(timestamp));
+  } catch (e) {
+    formattedText = getWordsSince(timestamp);
+    console.error(e);
+  }
+
   if ( url.pathname != '/' ) {
     if (url.pathname === '/visual') {
-      const now = Date.now()
-      const timestamp = parseInt(url.query.since || 0)
       res.setHeader('Content-Type', 'text/html')
-      res.end(`<html><head></head><body>${await formatText(getWordsSince(timestamp))}</body></html>`);
+      res.end(`<html><head></head><body>${formattedText}</body></html>`);
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('404 not found')
     }
   } else {
-    const now = Date.now()
-    const timestamp = parseInt(url.query.since || 0)
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({
       now: now,
-      captions: await formatText(getWordsSince(timestamp))
+      captions: formattedText,
     }))
   }
 }).listen(process.env.PORT || 5000)
@@ -67,35 +74,38 @@ async function formatText(str) {
   var ret = str.toLowerCase().replace("\r\n", ' ') // remove random line breaks
   ret = s.clean(ret) // remove redundant spaces
 
-  // Load proper noun dictionary
-  const words = await bertha.get('1o3kjPOvWCpyHWtBhCd9hTt9KMqus-85CXOHOdO0o1UA', ['words'], { republish: true }).then((data) => {
-    return data.words.map(d => [d.matchword, d.ftstyle]);
-  });
+  try {
+    // Load proper noun dictionary
+    const words = (await bertha.get('1o3kjPOvWCpyHWtBhCd9hTt9KMqus-85CXOHOdO0o1UA', ['words'], { republish: true }))
+      .words
+      .map(d => [d.matchword, d.ftstyle]);
 
-  // now use our words file to do a bunch of stuff
-  words.forEach((pair) => {
-    ret = ret
+    // now use our words file to do a bunch of stuff
+    words.forEach((pair) => {
+      ret = ret
       .replace(new RegExp(` ${pair[0].replace('.', '\\.')}( |\\.|,|:|')`, 'gi'), (match, a) => { return ` ${pair[1]}${a}` })
       .replace(new RegExp(`^${pair[0]}( |\\.|,|:|')`, 'i'), (match, a) => { return `${pair[1]}${a}` })
       .replace(new RegExp(` ${pair[0]}$`, 'i'), pair[1])
-  })
+    })
 
-  ret = ret
+    ret = ret
     // Music notes
     .replace(/\s+b\x19\*\s+/, '\n\n🎵\n\n')
     // remove blank space before puncuation
     .replace(/\s+(!|\?|;|:|,|\.|')/g, '$1')
     // handle honorifics
     .replace(/ (sen\.?|rep\.?|mr\.?|mrs\.?|ms\.?|dr\.?) (\w)/gi,
-             (match, a, b) => { return ` ${s.capitalize(a)} ${b.toUpperCase()}` })
+    (match, a, b) => { return ` ${s.capitalize(a)} ${b.toUpperCase()}` })
     // Cap first letter of sentences
     .replace(/(!|\?|:|\.|>>)\s+(\w)/g, (match, a, b) => { return `${a} ${b.toUpperCase()}` })
     // >> seems to be used instead of repeating speaker prompts in back and forths
     .replace(/\s*>>\s*/g, "\n\n>> ")
     // Put speaker prompts on new lines
     .replace(/(\.|"|!|\?|—)\s*([a-zA-Z. ]{2,30}:)/g, '$1\n\n$2')
-
-  return ret
+    return ret;
+  } catch (e) {
+    throw new Error('Error loading Bertha proper noun dictionary: ', e);
+  }
 }
 
 function getWordsSince(timestamp) {
