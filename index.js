@@ -36,7 +36,7 @@ socket.on('content', data => {
   if ( txt ) { txt.write(data.data.body) }
   if ( data.data.body === "\r\n" ) { return }
   const dat = {t: Date.now(), r: data.data.body}
-  console.log(dat.t, dat.r)
+  // console.log(dat.t, dat.r)
   cache.push(dat)
 })
 
